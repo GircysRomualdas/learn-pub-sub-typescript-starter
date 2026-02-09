@@ -1,7 +1,10 @@
 import amqp from "amqplib";
 import type { Channel } from "amqplib";
 
-export type SimpleQueueType = "durable" | "transient";
+export enum SimpleQueueType {
+  Durable,
+  Transient,
+}
 
 export async function declareAndBind(
   conn: amqp.ChannelModel,
@@ -11,10 +14,11 @@ export async function declareAndBind(
   queueType: SimpleQueueType,
 ): Promise<[Channel, amqp.Replies.AssertQueue]> {
   const ch = await conn.createChannel();
+
   const queue = await ch.assertQueue(queueName, {
-    durable: queueType === "durable",
-    autoDelete: queueType === "transient",
-    exclusive: queueType === "transient",
+    durable: queueType === SimpleQueueType.Durable,
+    exclusive: queueType !== SimpleQueueType.Durable,
+    autoDelete: queueType !== SimpleQueueType.Durable,
   });
 
   await ch.bindQueue(queue.queue, exchange, key);
