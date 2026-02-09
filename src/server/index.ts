@@ -13,7 +13,12 @@ async function main() {
   const playingState: PlayingState = {
     isPaused: true,
   };
-  await publishJSON(ch, ExchangePerilDirect, PauseKey, playingState);
+
+  try {
+    await publishJSON(ch, ExchangePerilDirect, PauseKey, playingState);
+  } catch (err) {
+    console.error("Error publishing message:", err);
+  }
 
   ["SIGINT", "SIGTERM"].forEach((signal) =>
     process.on(signal, async () => {
