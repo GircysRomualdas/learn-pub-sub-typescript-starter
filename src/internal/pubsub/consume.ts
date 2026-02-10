@@ -6,6 +6,12 @@ export enum SimpleQueueType {
   Transient,
 }
 
+export enum AckType {
+  Ack,
+  NackDiscard,
+  NackRequeue,
+}
+
 export async function declareAndBind(
   conn: amqp.ChannelModel,
   exchange: string,
@@ -19,6 +25,9 @@ export async function declareAndBind(
     durable: queueType === SimpleQueueType.Durable,
     exclusive: queueType !== SimpleQueueType.Durable,
     autoDelete: queueType !== SimpleQueueType.Durable,
+    arguments: {
+      "x-dead-letter-exchange": "peril_dlx",
+    },
   });
 
   await ch.bindQueue(queue.queue, exchange, key);
@@ -32,7 +41,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType,
-  handler: (data: T) => void,
+  handler: (data: T) => AckType,
 ): Promise<void> {
   const [ch, queue] = await declareAndBind(
     conn,
@@ -53,8 +62,25 @@ export async function subscribeJSON<T>(
         throw new Error("Empty message body");
       }
       const data = JSON.parse(raw);
-      handler(data);
-      ch.ack(msg);
+
+      const result = handler(data);
+
+      switch (result) {
+        case AckType.Ack:
+          ch.ack(msg);
+          console.log("Message acknowledged");
+          break;
+        case AckType.NackRequeue:
+          ch.nack(msg, false, true);
+          console.log("Message nacked and requeued");
+          break;
+        case AckType.NackDiscard:
+          ch.nack(msg, false, false);
+          console.log("Message nacked and discarded");
+          break;
+        default:
+          console.error("Unknown AckType received");
+      }
     } catch (err) {
       console.error("Invalid JSON message:", err);
       ch.nack(msg, false, false);
