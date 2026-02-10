@@ -1,7 +1,13 @@
 import amqp from "amqplib";
 import { publishJSON } from "../internal/pubsub/publish";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing";
+import {
+  ExchangePerilDirect,
+  PauseKey,
+  ExchangePerilTopic,
+  GameLogSlug,
+} from "../internal/routing/routing";
 import { printServerHelp, getInput } from "../internal/gamelogic/gamelogic";
+import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume";
 
 async function main() {
   const connStr = "amqp://guest:guest@localhost:5672/";
@@ -19,43 +25,45 @@ async function main() {
       }
     }),
   );
+  await declareAndBind(
+    conn,
+    ExchangePerilTopic,
+    GameLogSlug,
+    `${GameLogSlug}.*`,
+    SimpleQueueType.Durable,
+  );
   const publishCh = await conn.createConfirmChannel();
 
   printServerHelp();
 
   while (true) {
     const words = await getInput();
+    if (words.length === 0) continue;
 
-    if (words.length === 0) {
-      continue;
-    }
-
-    switch (words[0]) {
-      case "pause":
-        console.log("Sending a pause message");
-        try {
-          await publishJSON(publishCh, ExchangePerilDirect, PauseKey, {
-            isPaused: true,
-          });
-        } catch (err) {
-          console.error("Error publishing message:", err);
-        }
-        break;
-      case "resume":
-        console.log("Sending a resume message");
-        try {
-          await publishJSON(publishCh, ExchangePerilDirect, PauseKey, {
-            isPaused: false,
-          });
-        } catch (err) {
-          console.error("Error publishing message:", err);
-        }
-        break;
-      case "quit":
-        console.log("Exiting...");
-        return;
-      default:
-        console.log(`unknown command: ${words[0]}`);
+    const command = words[0];
+    if (command === "pause") {
+      console.log("Publishing paused game state");
+      try {
+        await publishJSON(publishCh, ExchangePerilTopic, PauseKey, {
+          isPaused: true,
+        });
+      } catch (err) {
+        console.error("Error publishing pause message:", err);
+      }
+    } else if (command === "resume") {
+      console.log("Publishing resumed game state");
+      try {
+        await publishJSON(publishCh, ExchangePerilTopic, PauseKey, {
+          isPaused: false,
+        });
+      } catch (err) {
+        console.error("Error publishing resume message:", err);
+      }
+    } else if (command === "quit") {
+      console.log("Goodbye!");
+      process.exit(0);
+    } else {
+      console.log("Unknown command");
     }
   }
 }
