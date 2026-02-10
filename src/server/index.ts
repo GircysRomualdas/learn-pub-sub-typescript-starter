@@ -44,7 +44,7 @@ async function main() {
     if (command === "pause") {
       console.log("Publishing paused game state");
       try {
-        await publishJSON(publishCh, ExchangePerilTopic, PauseKey, {
+        await publishJSON(publishCh, ExchangePerilDirect, PauseKey, {
           isPaused: true,
         });
       } catch (err) {
@@ -53,7 +53,7 @@ async function main() {
     } else if (command === "resume") {
       console.log("Publishing resumed game state");
       try {
-        await publishJSON(publishCh, ExchangePerilTopic, PauseKey, {
+        await publishJSON(publishCh, ExchangePerilDirect, PauseKey, {
           isPaused: false,
         });
       } catch (err) {
