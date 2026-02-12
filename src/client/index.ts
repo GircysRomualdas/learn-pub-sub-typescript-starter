@@ -5,6 +5,7 @@ import {
   commandStatus,
   printClientHelp,
   printQuit,
+  getMaliciousLog,
 } from "../internal/gamelogic/gamelogic";
 import {
   declareAndBind,
@@ -102,7 +103,21 @@ async function main() {
     } else if (command === "help") {
       printClientHelp();
     } else if (command === "spam") {
-      console.log("Spamming not allowed yet!");
+      if (words.length !== 2) {
+        console.log("Usage: spam <number of times>");
+        continue;
+      }
+
+      const number = Number(words[1]);
+      if (Number.isNaN(number) || number <= 0) {
+        console.log("Usage: spam <number of times>");
+        continue;
+      }
+
+      for (let i = 0; i < number; i++) {
+        const log = getMaliciousLog();
+        await publishGameLog(publishCh, gameState.getUsername(), log);
+      }
     } else if (command === "quit") {
       printQuit();
       process.exit(0);
@@ -131,7 +146,7 @@ export async function publishGameLog(
   await publishMsgPack(
     ch,
     ExchangePerilTopic,
-    `${GameLogSlug}.username`,
+    `${GameLogSlug}.${username}`,
     gameLog,
   );
 }
