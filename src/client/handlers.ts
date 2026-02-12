@@ -37,13 +37,17 @@ export function handlerMove(
           attacker: move.player,
           defender: gs.getPlayerSnap(),
         };
-        await publishJSON(
-          ch,
-          ExchangePerilTopic,
-          `${WarRecognitionsPrefix}.${gs.getUsername()}`,
-          recognition,
-        );
-        return AckType.NackRequeue;
+        try {
+          await publishJSON(
+            ch,
+            ExchangePerilTopic,
+            `${WarRecognitionsPrefix}.${gs.getUsername()}`,
+            recognition,
+          );
+          return AckType.Ack;
+        } catch {
+          return AckType.NackRequeue;
+        }
       case MoveOutcome.SamePlayer:
         return AckType.NackDiscard;
       default:
