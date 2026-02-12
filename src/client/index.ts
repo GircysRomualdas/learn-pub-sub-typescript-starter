@@ -17,12 +17,16 @@ import {
   ArmyMovesPrefix,
   ExchangePerilTopic,
   WarRecognitionsPrefix,
+  GameLogSlug,
 } from "../internal/routing/routing";
 import { GameState } from "../internal/gamelogic/gamestate";
 import { commandSpawn } from "../internal/gamelogic/spawn";
 import { commandMove } from "../internal/gamelogic/move";
 import { handlerPause, handlerMove, handlerWar } from "./handlers";
-import { publishJSON } from "../internal/pubsub/publish";
+import { publishJSON, publishMsgPack } from "../internal/pubsub/publish";
+
+import type { Channel } from "amqplib";
+import type { GameLog } from "../internal/gamelogic/logs";
 
 async function main() {
   const connStr = "amqp://guest:guest@localhost:5672/";
@@ -66,7 +70,7 @@ async function main() {
     `${WarRecognitionsPrefix}`,
     `${WarRecognitionsPrefix}.*`,
     SimpleQueueType.Durable,
-    handlerWar(gameState),
+    handlerWar(gameState, publishCh),
   );
 
   while (true) {
@@ -113,3 +117,21 @@ main().catch((err) => {
   console.error("Fatal error:", err);
   process.exit(1);
 });
+
+export async function publishGameLog(
+  ch: Channel,
+  username: string,
+  message: string,
+): Promise<void> {
+  const gameLog: GameLog = {
+    username: username,
+    message: message,
+    currentTime: new Date(),
+  };
+  await publishMsgPack(
+    ch,
+    ExchangePerilTopic,
+    `${GameLogSlug}.username`,
+    gameLog,
+  );
+}

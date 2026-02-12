@@ -12,6 +12,7 @@ import {
 import type { RecognitionOfWar } from "../internal/gamelogic/gamedata";
 import type { Channel } from "amqplib";
 import { handleWar, WarOutcome } from "../internal/gamelogic/war";
+import { publishGameLog } from "./index.ts";
 
 export function handlerPause(gs: GameState): (ps: PlayingState) => AckType {
   return (ps: PlayingState): AckType => {
@@ -58,10 +59,13 @@ export function handlerMove(
 
 export function handlerWar(
   gs: GameState,
+  ch: Channel,
 ): (rw: RecognitionOfWar) => Promise<AckType> {
   return async (rw: RecognitionOfWar): Promise<AckType> => {
     const warResolution = handleWar(gs, rw);
-    console.log("> ");
+    process.stdout.write("> ");
+
+    let msg: string;
 
     switch (warResolution.result) {
       case WarOutcome.NotInvolved:
@@ -70,11 +74,21 @@ export function handlerWar(
         return AckType.NackDiscard;
       case WarOutcome.YouWon:
       case WarOutcome.OpponentWon:
+        msg = `${warResolution.winner} won a war against ${warResolution.loser}`;
+        break;
       case WarOutcome.Draw:
-        return AckType.Ack;
+        msg = `A war between ${warResolution.attacker} and ${warResolution.defender} resulted in a draw`;
+        break;
       default:
         console.log(`Unknown war resolution: ${warResolution.result}`);
         return AckType.NackDiscard;
     }
+
+    try {
+      await publishGameLog(ch, gs.getUsername(), msg);
+    } catch {
+      return AckType.NackRequeue;
+    }
+    return AckType.Ack;
   };
 }
