@@ -16,11 +16,12 @@ import {
   PauseKey,
   ArmyMovesPrefix,
   ExchangePerilTopic,
+  WarRecognitionsPrefix,
 } from "../internal/routing/routing";
 import { GameState } from "../internal/gamelogic/gamestate";
 import { commandSpawn } from "../internal/gamelogic/spawn";
 import { commandMove } from "../internal/gamelogic/move";
-import { handlerPause, handlerMove } from "./handlers";
+import { handlerPause, handlerMove, handlerWar } from "./handlers";
 import { publishJSON } from "../internal/pubsub/publish";
 
 async function main() {
@@ -42,6 +43,7 @@ async function main() {
 
   const username = await clientWelcome();
   const gameState = new GameState(username);
+  const publishCh = await conn.createConfirmChannel();
   await subscribeJSON(
     conn,
     ExchangePerilDirect,
@@ -56,9 +58,16 @@ async function main() {
     `${ArmyMovesPrefix}.${username}`,
     `${ArmyMovesPrefix}.*`,
     SimpleQueueType.Transient,
-    handlerMove(gameState),
+    handlerMove(gameState, publishCh),
   );
-  const publishCh = await conn.createConfirmChannel();
+  await subscribeJSON(
+    conn,
+    ExchangePerilTopic,
+    `${WarRecognitionsPrefix}`,
+    `${WarRecognitionsPrefix}.*`,
+    SimpleQueueType.Durable,
+    handlerWar(gameState),
+  );
 
   while (true) {
     const words = await getInput();
