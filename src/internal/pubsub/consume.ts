@@ -1,5 +1,6 @@
 import amqp from "amqplib";
 import type { Channel } from "amqplib";
+import { decode } from "@msgpack/msgpack";
 
 export enum SimpleQueueType {
   Durable,
@@ -43,25 +44,69 @@ export async function subscribeJSON<T>(
   queueType: SimpleQueueType,
   handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
-  const [ch, queue] = await declareAndBind(
+  await subscribe(
     conn,
     exchange,
     queueName,
     key,
     queueType,
-  );
-  await ch.consume(queue.queue, async (msg: amqp.ConsumeMessage | null) => {
-    if (msg === null) {
-      return;
-    }
-
-    try {
-      const raw = msg.content.toString("utf8");
+    handler,
+    (data: Buffer): T => {
+      const raw = data.toString("utf8");
 
       if (raw === "") {
         throw new Error("Empty message body");
       }
-      const data = JSON.parse(raw);
+      return JSON.parse(raw);
+    },
+  );
+}
+
+export async function subscribeMsgPack<T>(
+  conn: amqp.ChannelModel,
+  exchange: string,
+  queueName: string,
+  key: string,
+  queueType: SimpleQueueType,
+  handler: (data: T) => Promise<AckType> | AckType,
+): Promise<void> {
+  await subscribe(
+    conn,
+    exchange,
+    queueName,
+    key,
+    queueType,
+    handler,
+    (data: Buffer): T => {
+      return decode(data) as T;
+    },
+  );
+}
+
+async function subscribe<T>(
+  conn: amqp.ChannelModel,
+  exchange: string,
+  queueName: string,
+  routingKey: string,
+  simpleQueueType: SimpleQueueType,
+  handler: (data: T) => Promise<AckType> | AckType,
+  unmarshaller: (data: Buffer) => T,
+): Promise<void> {
+  const [ch, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    routingKey,
+    simpleQueueType,
+  );
+  await ch.consume(queue.queue, async (msg: amqp.ConsumeMessage | null) => {
+    if (!msg) return;
+
+    try {
+      if (!msg.content || msg.content.length === 0) {
+        throw new Error("Empty message body");
+      }
+      const data = unmarshaller(msg.content);
 
       const result = await handler(data);
 
@@ -82,7 +127,7 @@ export async function subscribeJSON<T>(
           console.error("Unknown AckType received");
       }
     } catch (err) {
-      console.error("Invalid JSON message:", err);
+      console.error("Invalid message:", err);
       ch.nack(msg, false, false);
     }
   });

@@ -8,6 +8,8 @@ import {
 } from "../internal/routing/routing";
 import { printServerHelp, getInput } from "../internal/gamelogic/gamelogic";
 import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume";
+import { subscribeMsgPack } from "../internal/pubsub/consume";
+import { handlerLog } from "./handlers";
 
 async function main() {
   const connStr = "amqp://guest:guest@localhost:5672/";
@@ -33,6 +35,15 @@ async function main() {
     SimpleQueueType.Durable,
   );
   const publishCh = await conn.createConfirmChannel();
+
+  await subscribeMsgPack(
+    conn,
+    ExchangePerilTopic,
+    GameLogSlug,
+    `${GameLogSlug}.*`,
+    SimpleQueueType.Durable,
+    handlerLog(),
+  );
 
   printServerHelp();
 
